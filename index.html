@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simple Gantt</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#fff; --line:#e3e6ea; --text:#1f2933; --muted:#7b8794;
+    --weekend:#f1f3f5; --today:#e5484d; --accent:#3b82f6;
+    --left:740px; --rowh:40px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.3 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column}
+  header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+  #title{font-size:18px;font-weight:600;border:1px solid transparent;border-radius:6px;padding:4px 8px;min-width:200px;background:transparent;color:inherit}
+  #title:hover,#title:focus{border-color:var(--line);outline:none;background:#fff}
+  .spacer{flex:1}
+  button,select{font:inherit;padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;color:inherit;cursor:pointer}
+  button:hover{background:#f0f2f5}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#2f6fdc}
+  label.chk{display:flex;align-items:center;gap:6px;color:var(--muted);cursor:pointer}
+  #wrap{flex:1;overflow:auto;position:relative;background:var(--panel)}
+  .row{display:flex;height:var(--rowh);border-bottom:1px solid var(--line);width:max-content;min-width:100%}
+  .left{position:sticky;left:0;z-index:5;width:var(--left);flex:none;background:var(--panel);border-right:1px solid var(--line);display:flex;align-items:center;gap:6px;padding:0 8px}
+  .right{position:relative;flex:none}
+  .head{position:sticky;top:0;z-index:10;background:var(--panel)}
+  .head .left{z-index:11;font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .head.r1{height:26px}.head.r2{height:24px;top:26px}
+  .head .right>div{position:absolute;top:0;bottom:0;border-left:1px solid var(--line);padding:4px 6px;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden}
+  .head.r2 .right>div{padding:4px 0;text-align:center}
+  .head.r1 .right>div{font-weight:600;color:var(--text)}
+  #body{position:relative;width:max-content;min-width:100%}
+  #grid{position:absolute;top:0;bottom:0;pointer-events:none;z-index:0}
+  #grid .wk{position:absolute;top:0;bottom:0;background:var(--weekend)}
+  #grid .ln{position:absolute;top:0;bottom:0;border-left:1px solid #eef0f2}
+  #grid .today{position:absolute;top:0;bottom:0;width:2px;background:var(--today);opacity:.7}
+  .tr{position:relative;z-index:1}
+  .tr:hover .left{background:#fafbfc}
+  .left input{font:inherit;color:inherit;border:1px solid transparent;border-radius:5px;padding:5px 6px;background:transparent;min-width:0}
+  .left input:hover{border-color:var(--line)}
+  .left input:focus{outline:none;border-color:var(--accent);background:#fff}
+  .nm{flex:1;width:100%}.dt{width:120px;flex:none}.du{width:50px;flex:none;text-align:center}
+  .nmw{flex:1;display:flex;align-items:center;min-width:0}
+  .chev{width:18px;flex:none;padding:0;text-align:center;border:none;background:none;color:var(--muted);cursor:pointer;font-size:12px}
+  .act{width:150px;flex:none;display:flex;justify-content:flex-end}
+  .left input:disabled{color:var(--muted);background:transparent;border-color:transparent;cursor:default}
+  .tr.parent .nm{font-weight:600}
+  .bar.sum{top:13px;height:14px;border-radius:3px;overflow:visible;box-shadow:none;opacity:.9}
+  .bar.sum .pg{border-radius:3px 0 0 3px}
+  .bar.sum::before,.bar.sum::after{content:"";position:absolute;top:100%;border:5px solid transparent;border-top-color:inherit}
+  .bar.sum::before{left:0;border-left-color:inherit}
+  .bar.sum::after{right:0;border-right-color:inherit}
+  .bar.sum .lb{position:absolute;left:100%;margin-left:10px;color:var(--text);text-shadow:none;padding:0}
+  input[type=color]{width:24px;height:24px;padding:0;border:none;cursor:pointer;border-radius:50%;flex:none;background:none}
+  input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+  input[type=color]::-webkit-color-swatch{border:none;border-radius:50%}
+  .ib{padding:2px 5px;border:none;background:transparent;color:var(--muted);font-size:13px}
+  .ib:hover{background:#e9ecef;color:var(--text)}
+  .bar{position:absolute;top:7px;height:calc(var(--rowh) - 14px);border-radius:6px;cursor:grab;user-select:none;touch-action:none;overflow:hidden;display:flex;align-items:center;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+  .bar.drag{cursor:grabbing;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+  .bar .pg{position:absolute;inset:0 auto 0 0;background:rgba(0,0,0,.28);pointer-events:none}
+  .bar .lb{position:relative;color:#fff;font-size:12px;padding:0 10px;white-space:nowrap;pointer-events:none;text-shadow:0 1px 1px rgba(0,0,0,.3)}
+  .bar .h{position:absolute;top:0;bottom:0;width:9px;cursor:ew-resize}
+  .bar .h.l{left:0}.bar .h.r{right:0}
+  .bar .h:hover{background:rgba(255,255,255,.35)}
+  .bar .pgh{position:absolute;bottom:0;height:5px;width:12px;margin-left:-6px;cursor:col-resize;display:none}
+  .bar:hover .pgh{display:block;background:rgba(255,255,255,.7)}
+  #empty{padding:40px;text-align:center;color:var(--muted)}
+  #tip{position:fixed;z-index:50;background:#1f2933;color:#fff;padding:4px 8px;border-radius:5px;font-size:12px;pointer-events:none;display:none}
+  footer{padding:6px 16px;font-size:12px;color:var(--muted);background:var(--panel);border-top:1px solid var(--line)}
+  @media print{header,footer{display:none}#wrap{overflow:visible}.left{position:static}.ib{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <input id="title" value="My Project" aria-label="Project title">
+  <div class="spacer"></div>
+  <label class="chk" title="When you move a task or change its end date, every task below it shifts by the same amount"><input type="checkbox" id="cascade"> Shift following tasks too</label>
+  <select id="zoom" aria-label="Zoom">
+    <option value="12">Zoom: Months</option>
+    <option value="24">Zoom: Weeks</option>
+    <option value="40">Zoom: Days</option>
+  </select>
+  <button id="today">Today</button>
+  <button id="export">Export</button>
+  <button id="import">Import</button>
+  <button id="print">Print</button>
+  <button class="primary" id="add">+ Add task</button>
+  <input type="file" id="file" accept=".json" hidden>
+</header>
+<div id="wrap"><div id="body"></div></div>
+<footer>Drag a bar to move it · drag its edges to change length · hover the bottom edge and drag to set progress · everything saves automatically in this browser.</footer>
+<div id="tip"></div>
+
+<script>
+const KEY='simple-gantt-v1';
+const DAY=864e5, LEFT=740;
+const COLORS=['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899','#64748b'];
+const $=s=>document.querySelector(s);
+const toDay=iso=>{const [y,m,d]=iso.split('-').map(Number);return Math.round(Date.UTC(y,m-1,d)/DAY)};
+const toIso=n=>new Date(n*DAY).toISOString().slice(0,10);
+const todayN=()=>{const d=new Date();return Math.round(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/DAY)};
+const fmt=n=>new Date(n*DAY).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
+const uid=()=>Math.random().toString(36).slice(2,9);
+
+function sample(){
+  const t=todayN();
+  const mk=(name,s,len,p,c)=>({id:uid(),name,start:toIso(t+s),end:toIso(t+s+len-1),progress:p,color:COLORS[c]});
+  return {title:'My Project',zoom:24,cascade:false,tasks:[
+    mk('Planning',0,5,100,0),mk('Design',5,10,0,3),{...mk('Wireframes',5,4,100,3),level:1},{...mk('Visual design',9,6,40,3),level:1},mk('Build',15,14,20,1),mk('Testing',29,7,0,2),mk('Launch',36,2,0,4)]};
+}
+let S;
+try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+if(!S||!Array.isArray(S.tasks))S=sample();
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+
+const T=t=>({s:toDay(t.start),e:toDay(t.end)});
+
+// ---- tree helpers (flat list + indent level) ----
+const lv=i=>S.tasks[i].level||0;
+function blockEnd(i){let j=i;while(j+1<S.tasks.length&&lv(j+1)>lv(i))j++;return j}
+const isParent=i=>blockEnd(i)>i;
+function normalize(){S.tasks.forEach((t,i)=>{t.level=i===0?0:Math.max(0,Math.min(t.level||0,lv(i-1)+1))})}
+// parents take their dates/progress from their children
+function sync(){
+  normalize();
+  for(let i=S.tasks.length-1;i>=0;i--){
+    const e=blockEnd(i); if(e===i) continue;
+    let mn=Infinity,mx=-Infinity,wp=0,wd=0;
+    for(let j=i+1;j<=e;j++){
+      const s=toDay(S.tasks[j].start),f=toDay(S.tasks[j].end);
+      mn=Math.min(mn,s);mx=Math.max(mx,f);
+      if(blockEnd(j)===j){const d=f-s+1;wd+=d;wp+=d*(S.tasks[j].progress||0)}
+    }
+    const t=S.tasks[i];t.start=toIso(mn);t.end=toIso(mx);t.progress=wd?Math.round(wp/wd):0;
+  }
+}
+// Apply a change to task i; a parent moves its whole group. Optionally shift all later tasks too.
+function apply(i,ns,ne,snap){
+  S.tasks.forEach((t,j)=>Object.assign(t,snap[j]));
+  const sh=(j,d)=>{const u=S.tasks[j];u.start=toIso(toDay(snap[j].start)+d);u.end=toIso(toDay(snap[j].end)+d)};
+  const end=blockEnd(i); let shift,from;
+  if(end>i){ shift=ns-toDay(snap[i].start); for(let j=i;j<=end;j++)sh(j,shift); from=end+1; }
+  else { shift=ne-toDay(snap[i].end); const t=S.tasks[i];t.start=toIso(ns);t.end=toIso(ne); from=i+1; }
+  if(S.cascade&&shift) for(let j=from;j<S.tasks.length;j++) sh(j,shift);
+  sync();
+}
+const snapshot=()=>S.tasks.map(t=>({start:t.start,end:t.end,progress:t.progress}));
+
+function render(){
+  document.title=(S.title||'Simple Gantt')+' – Gantt';
+  $('#title').value=S.title; $('#cascade').checked=!!S.cascade; $('#zoom').value=S.zoom;
+  const dw=+S.zoom, body=$('#body');
+  if(!S.tasks.length){body.innerHTML='<div id="empty">No tasks yet. Click <b>+ Add task</b> to start.</div>';return}
+  let min=Infinity,max=-Infinity;
+  S.tasks.forEach(t=>{const {s,e}=T(t);min=Math.min(min,s);max=Math.max(max,e)});
+  min=Math.min(min,todayN())-7; max=Math.max(max,todayN())+21;
+  // start on a Monday
+  min-=((new Date(min*DAY).getUTCDay()+6)%7);
+  const n=max-min+1, W=n*dw;
+  window._origin=min;
+
+  // header
+  let m1='',m2='',curKey=null,curLabel='',curX=0;
+  for(let i=0;i<n;i++){
+    const d=new Date((min+i)*DAY), key=d.getUTCFullYear()+'-'+d.getUTCMonth();
+    if(key!==curKey){
+      if(curKey!==null) m1+=`<div style="left:${curX}px;width:${i*dw-curX}px">${curLabel}</div>`;
+      curKey=key;curX=i*dw;
+      curLabel=d.toLocaleDateString(undefined,{month:'long',year:'numeric',timeZone:'UTC'});
+    }
+    const dow=d.getUTCDay();
+    if(dw>=24) m2+=`<div style="left:${i*dw}px;width:${dw}px">${d.getUTCDate()}</div>`;
+    else if(dow===1) m2+=`<div style="left:${i*dw}px;width:${dw*7}px">${d.getUTCDate()}</div>`;
+  }
+  m1+=`<div style="left:${curX}px;width:${W-curX}px">${curLabel}</div>`;
+  const head=`
+    <div class="row head r1"><div class="left">Task</div><div class="right" style="width:${W}px">${m1}</div></div>
+    <div class="row head r2"><div class="left"><span style="width:24px"></span><span style="flex:1"></span><span style="width:120px">Start</span><span style="width:120px">End</span><span style="width:50px;text-align:center">Days</span><span style="width:150px"></span></div><div class="right" style="width:${W}px">${m2}</div></div>`;
+
+  // grid layer
+  let g='';
+  for(let i=0;i<n;i++){
+    const dow=new Date((min+i)*DAY).getUTCDay();
+    if(dow===0||dow===6) g+=`<div class="wk" style="left:${i*dw}px;width:${dw}px"></div>`;
+    if(dw>=24||dow===1) g+=`<div class="ln" style="left:${i*dw}px"></div>`;
+  }
+  g+=`<div class="today" style="left:${(todayN()-min)*dw+dw/2-1}px" title="Today"></div>`;
+
+  let hideBelow=null;
+  const rows=S.tasks.map((t,i)=>{
+    if(hideBelow!==null){ if(lv(i)>hideBelow) return ''; hideBelow=null; }
+    const par=isParent(i); if(par&&t.collapsed) hideBelow=lv(i);
+    const {s,e}=T(t), dur=e-s+1, p=Math.max(0,Math.min(100,t.progress||0));
+    const dis=par?'disabled':'';
+    return `<div class="row tr${par?' parent':''}" data-i="${i}">
+      <div class="left">
+        <input type="color" value="${t.color}" data-f="color" title="Colour">
+        <div class="nmw" style="padding-left:${lv(i)*20}px">
+          ${par?`<button class="chev" data-a="fold" title="Collapse / expand">${t.collapsed?'▸':'▾'}</button>`:'<span class="chev"></span>'}
+          <input class="nm" value="${esc(t.name)}" data-f="name" placeholder="Task name">
+        </div>
+        <input class="dt" type="date" value="${t.start}" data-f="start" title="Changing start moves the task${par?' and all its subtasks':''}">
+        <input class="dt" type="date" value="${t.end}" data-f="end" ${dis} title="${par?'Set by its subtasks':''}">
+        <input class="du" type="number" min="1" value="${dur}" data-f="dur" ${dis}>
+        <div class="act">
+          <button class="ib" data-a="out" title="Outdent (make a higher-level task)">◀</button><button class="ib" data-a="in" title="Indent (make a subtask of the task above)">▶</button><button class="ib" data-a="sub" title="Add subtask">＋</button><button class="ib" data-a="up" title="Move up">▲</button><button class="ib" data-a="down" title="Move down">▼</button><button class="ib" data-a="del" title="Delete">✕</button>
+        </div>
+      </div>
+      <div class="right" style="width:${W}px">
+        <div class="bar${par?' sum':''}" data-i="${i}" style="left:${(s-min)*dw}px;width:${dur*dw}px;background:${t.color};border-top-color:${t.color};border-left-color:${t.color}">
+          <div class="pg" style="width:${p}%"></div>
+          <div class="lb">${esc(t.name)}${p?` · ${p}%`:''}</div>
+          ${par?'':`<div class="h l" data-m="l"></div><div class="h r" data-m="r"></div><div class="pgh" data-m="p" style="left:${p}%"></div>`}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  body.innerHTML=`<div id="grid" style="left:${LEFT}px;width:${W}px"></div>${head}${rows}`;
+  $('#grid').innerHTML=g;
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---- edits from the table ----
+$('#body').addEventListener('change',ev=>{
+  const el=ev.target, row=el.closest('.tr'); if(!row||!el.dataset.f) return;
+  const i=+row.dataset.i, t=S.tasks[i], f=el.dataset.f, snap=snapshot();
+  const {s,e}=T(t), dur=e-s+1;
+  if(f==='name'||f==='color'){t[f]=el.value}
+  else if(!el.value||(f!=='dur'&&isNaN(toDay(el.value)))){}
+  else if(f==='start'){const ns=toDay(el.value); apply(i,ns,ns+dur-1,snap)}
+  else if(f==='end'){let ne=toDay(el.value); if(ne<s)ne=s; apply(i,s,ne,snap)}
+  else if(f==='dur'){const d=Math.max(1,parseInt(el.value)||1); apply(i,s,s+d-1,snap)}
+  save();render();
+});
+$('#body').addEventListener('click',ev=>{
+  const b=ev.target.closest('[data-a]'); if(!b) return;
+  const i=+b.closest('.tr').dataset.i, a=b.dataset.a, A=S.tasks, e=blockEnd(i), L=lv(i);
+  if(a==='fold') A[i].collapsed=!A[i].collapsed;
+  else if(a==='del'){
+    if(e>i&&!confirm('Delete this task and its '+(e-i)+' subtask(s)?')) return;
+    A.splice(i,e-i+1);
+  }
+  else if(a==='in'){ if(i>0&&L<=lv(i-1)) for(let j=i;j<=e;j++)A[j].level=lv(j)+1; }
+  else if(a==='out'){ if(L>0) for(let j=i;j<=e;j++)A[j].level=lv(j)-1; }
+  else if(a==='sub'){
+    const last=e>i?A[e]:null, s=last?toDay(last.end)+1:toDay(A[i].start);
+    A[i].collapsed=false;
+    A.splice(e+1,0,{id:uid(),name:'New subtask',start:toIso(s),end:toIso(s+6),progress:0,color:A[i].color,level:L+1});
+  }
+  else if(a==='up'){
+    let p=i-1; while(p>=0&&lv(p)>L)p--;
+    if(p>=0&&lv(p)===L){const blk=A.splice(i,e-i+1);A.splice(p,0,...blk)}
+  }
+  else if(a==='down'){
+    const n=e+1;
+    if(n<A.length&&lv(n)===L){const ne=blockEnd(n);const blk=A.splice(i,e-i+1);A.splice(ne-(e-i),0,...blk)}
+  }
+  sync();save();render();
+});
+
+// ---- dragging bars ----
+let drag=null; const tip=$('#tip');
+$('#body').addEventListener('pointerdown',ev=>{
+  const bar=ev.target.closest('.bar'); if(!bar||ev.button!==0) return;
+  const i=+bar.dataset.i, mode=ev.target.dataset.m||'move';
+  const {s,e}=T(S.tasks[i]);
+  drag={i,mode,x:ev.clientX,s,e,snap:snapshot(),dw:+S.zoom,pw:bar.offsetWidth,p:S.tasks[i].progress||0};
+  ev.preventDefault();
+});
+addEventListener('pointermove',ev=>{
+  if(!drag) return;
+  const {i,mode,s,e,dw}=drag, dd=Math.round((ev.clientX-drag.x)/dw);
+  if(mode==='p'){
+    const bar=document.querySelector(`.bar[data-i="${i}"]`);
+    const p=Math.max(0,Math.min(100,Math.round(drag.p+(ev.clientX-drag.x)/drag.pw*100)));
+    S.tasks[i].progress=p; bar.querySelector('.pg').style.width=p+'%'; bar.querySelector('.pgh').style.left=p+'%';
+    bar.querySelector('.lb').textContent=S.tasks[i].name+(p?` · ${p}%`:'');
+    showTip(ev,p+'% complete'); return;
+  }
+  let ns=s,ne=e;
+  if(mode==='move'){ns=s+dd;ne=e+dd}
+  else if(mode==='l'){ns=Math.min(s+dd,e)}
+  else if(mode==='r'){ne=Math.max(e+dd,s)}
+  apply(i,ns,ne,drag.snap); render();
+  const bar=document.querySelector(`.bar[data-i="${i}"]`); if(bar) bar.classList.add('drag');
+  showTip(ev,`${fmt(ns)} → ${fmt(ne)} (${ne-ns+1}d)`);
+});
+addEventListener('pointerup',()=>{ if(!drag) return; drag=null; tip.style.display='none'; sync(); save(); render(); });
+function showTip(ev,txt){tip.textContent=txt;tip.style.display='block';tip.style.left=ev.clientX+14+'px';tip.style.top=ev.clientY+14+'px'}
+
+// ---- toolbar ----
+$('#title').addEventListener('input',e=>{S.title=e.target.value;document.title=S.title+' – Gantt';save()});
+$('#cascade').addEventListener('change',e=>{S.cascade=e.target.checked;save()});
+$('#zoom').addEventListener('change',e=>{S.zoom=+e.target.value;save();render();scrollToday()});
+$('#add').addEventListener('click',()=>{
+  const last=S.tasks[S.tasks.length-1];
+  const s=last?toDay(last.end)+1:todayN();
+  S.tasks.push({id:uid(),name:'New task',start:toIso(s),end:toIso(s+6),progress:0,color:COLORS[S.tasks.length%COLORS.length],level:0});
+  sync();save();render();
+  const w=$('#wrap'); w.scrollTop=w.scrollHeight;
+  const inp=document.querySelector('.tr:last-of-type .nm'); if(inp){inp.focus();inp.select()}
+});
+function scrollToday(){const w=$('#wrap');w.scrollLeft=Math.max(0,(todayN()-window._origin)*S.zoom-200)}
+$('#today').addEventListener('click',scrollToday);
+$('#print').addEventListener('click',()=>print());
+$('#export').addEventListener('click',()=>{
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,2)],{type:'application/json'}));
+  a.download=(S.title||'gantt').replace(/[^\w-]+/g,'_')+'.json';a.click();
+});
+$('#import').addEventListener('click',()=>$('#file').click());
+$('#file').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  f.text().then(x=>{
+    try{const d=JSON.parse(x); if(!Array.isArray(d.tasks)) throw 0;
+      S=Object.assign({title:'Project',zoom:24,cascade:false},d); sync(); save(); render(); scrollToday();
+    }catch(err){alert('That file is not a valid Gantt export.')}
+  });
+  e.target.value='';
+});
+
+sync(); render(); scrollToday();
+</script>
+</body>
+</html>
