@@ -88,6 +88,7 @@
   <button id="import">Import</button>
   <button id="print">Print</button>
   <button class="primary" id="add">+ Add task</button>
+  <span id="status" style="color:var(--muted);font-size:12px"></span>
   <input type="file" id="file" accept=".json" hidden>
 </header>
 <div id="wrap"><div id="body"></div></div>
@@ -114,7 +115,30 @@ function sample(){
 let S;
 try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
 if(!S||!Array.isArray(S.tasks))S=sample();
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+let pushTimer=null,dirty=false;
+function save(){
+  try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
+  dirty=true; clearTimeout(pushTimer); pushTimer=setTimeout(push,600); setStatus('Saving…');
+}
+function setStatus(t){const el=document.getElementById('status');if(el)el.textContent=t}
+async function push(){
+  try{
+    const r=await fetch('/api/data',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(S)});
+    if(!r.ok) throw 0; const j=await r.json(); S.updatedAt=j.updatedAt; dirty=false; setStatus('Saved · shared with team');
+  }catch(e){setStatus('Offline – saved on this device only')}
+}
+async function pull(first){
+  if(drag||dirty||document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#body')) return;
+  try{
+    const r=await fetch('/api/data',{cache:'no-store'}); if(!r.ok) throw 0; const d=await r.json();
+    if(d&&Array.isArray(d.tasks)){
+      if(!S.updatedAt||d.updatedAt>S.updatedAt||first&&d.updatedAt!==S.updatedAt){
+        S=Object.assign({title:'Project',zoom:24,cascade:false},d); sync(); try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){} render();
+      }
+      setStatus('Up to date · shared with team');
+    } else if(first){ push() }
+  }catch(e){setStatus('Offline – saved on this device only')}
+}
 
 const T=t=>({s:toDay(t.start),e:toDay(t.end)});
 
@@ -323,6 +347,7 @@ $('#file').addEventListener('change',e=>{
 });
 
 sync(); render(); scrollToday();
+pull(true); setInterval(pull,8000);
 </script>
 </body>
 </html>
